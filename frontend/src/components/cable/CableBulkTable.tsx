@@ -5,6 +5,7 @@ import { api } from '../../api/client';
 import CableUploadWizard from './CableUploadWizard';
 import CatalogWizardModal from '../catalog/CatalogWizardModal';
 import CableSpecDrawer from './CableSpecDrawer';
+import ExportModal from './ExportModal';
 import type { CatalogMatchPerRow } from '../../types/catalog';
 
 interface Props {
@@ -42,6 +43,7 @@ const CableBulkTable: React.FC<Props> = ({ onSelectResult }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<BulkRow | null>(null);
   const [groupingThreshold, setGroupingThreshold] = useState<number>(0.85);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const handleChange = (id: string, field: keyof BulkRow, value: string | number) => {
     setRows((prev) =>
@@ -339,6 +341,13 @@ const CableBulkTable: React.FC<Props> = ({ onSelectResult }) => {
           >
             📊 Export Excel
           </button>
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            className="px-3 py-1.5 rounded-full text-[11px] bg-gradient-to-r from-sky-600 to-cyan-500 text-white shadow-soft-glow"
+          >
+            Export 📦
+          </button>
         </div>
       </div>
 
@@ -538,6 +547,7 @@ const CableBulkTable: React.FC<Props> = ({ onSelectResult }) => {
       </div>
 
       <CableSpecDrawer open={drawerOpen} row={selectedRow} onClose={() => { setDrawerOpen(false); setSelectedRow(null); }} />
+      <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} rows={rows} />
     </div>
   );
 };

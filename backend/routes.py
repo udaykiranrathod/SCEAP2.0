@@ -458,6 +458,210 @@ def export_excel(payload: dict):
 	}
 
 
+@router.post('/export/boq', response_model=dict)
+def export_boq(payload: dict):
+	"""Generate BOQ XLSX grouped by vendor, part_no, cores, csa.
+	Payload: { rows: [ BulkRow-like objects ], project: optional string }
+	Returns: { downloadUrl, filename }
+	"""
+	try:
+		from openpyxl import Workbook
+		from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+		from datetime import datetime
+	except ImportError:
+		raise HTTPException(status_code=500, detail='openpyxl not installed')
+
+	rows = payload.get('rows', [])
+	project = payload.get('project', 'PROJECT')
+	if not rows:
+		raise HTTPException(status_code=400, detail='No rows provided')
+
+	wb = Workbook()
+	if 'Sheet' in wb.sheetnames:
+		wb.remove(wb['Sheet'])
+
+	ws = wb.create_sheet('BOQ', 0)
+	headers = ['Vendor', 'Part No', 'Spec', 'Cores', 'CSA (mm²)', 'Qty (m)', 'Weight (kg)', 'Remarks']
+	ws.append(headers)
+
+	header_fill = PatternFill(start_color='0B5394', end_color='0B5394', fill_type='solid')
+	header_font = Font(bold=True, color='FFFFFF')
+	thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+
+	for cell in ws[1]:
+		cell.fill = header_fill
+		cell.font = header_font
+		cell.alignment = Alignment(horizontal='center', vertical='center')
+
+	from collections import defaultdict
+	# key: (vendor, part_no, spec, cores, csa)
+	agg = defaultdict(lambda: {'length': 0.0, 'weight': 0.0, 'remarks': set(), 'qty_count': 0})
+
+	for r in rows:
+		vendor = (r.get('catalog_vendor') or r.get('vendor') or 'UNKNOWN')
+		part = (r.get('catalog_part_no') or r.get('part_no') or '—')
+		spec = r.get('catalog_part_no') or ''
+		cores = r.get('catalog_cores') or r.get('cores') or (r.get('result') or {}).get('cores') or ''
+		csa = (r.get('catalog_csa_mm2') or (r.get('result') or {}).get('selected_csa') or 0)
+		length = float(r.get('length') or 0)
+		weight_per_km = float(r.get('catalog_weight_kg_per_km') or r.get('weight_kg_per_km') or 0)
+		remarks = r.get('remarks') or r.get('note') or ''
+
+		key = (vendor, part, spec, cores, float(csa))
+		agg[key]['length'] += length
+		agg[key]['weight'] += (weight_per_km * (length / 1000.0))
+		if remarks:
+			agg[key]['remarks'].add(str(remarks))
+		agg[key]['qty_count'] += 1
+
+	# Write rows
+	for key, vals in sorted(agg.items(), key=lambda x: (x[0][0], x[0][1])):
+		vendor, part, spec, cores, csa = key
+		total_len = round(vals['length'], 2)
+		total_wt = round(vals['weight'], 3)
+		remarks = '; '.join(sorted(vals['remarks'])) if vals['remarks'] else ''
+		ws.append([vendor, part, spec, cores, csa, total_len, total_wt, remarks])
+		for cell in ws[ws.max_row]:
+			cell.border = thin_border
+			cell.alignment = Alignment(horizontal='center', vertical='center')
+
+	# Column widths
+	for col, w in zip(('A','B','C','D','E','F','G','H'), (18,18,30,8,12,12,14,30)):
+		ws.column_dimensions[col].width = w
+
+	# Save to bytes and file
+	excel_bytes = BytesIO()
+	wb.save(excel_bytes)
+	excel_bytes.seek(0)
+
+	timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+	filename = f"BOQ_{project}_{timestamp}.xlsx"
+	filepath = f"/tmp/{filename}"
+	with open(filepath, 'wb') as f:
+		f.write(excel_bytes.getvalue())
+
+	return {'downloadUrl': f'/cable/download-excel/{filename}', 'filename': filename}
+
+
+@router.post('/export/sizing-report', response_model=dict)
+def export_sizing_report(payload: dict):
+	"""Generate a detailed sizing report XLSX. Payload: { rows: [...], columns: [...] , project: optional }
+	Returns downloadUrl and filename.
+	"""
+	try:
+		from openpyxl import Workbook
+		from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+		from datetime import datetime
+	except ImportError:
+		raise HTTPException(status_code=500, detail='openpyxl not installed')
+
+	rows = payload.get('rows', [])
+	columns = payload.get('columns', None)
+	project = payload.get('project', 'PROJECT')
+	if not rows:
+		raise HTTPException(status_code=400, detail='No rows provided')
+
+	wb = Workbook()
+	if 'Sheet' in wb.sheetnames:
+		wb.remove(wb['Sheet'])
+
+	ws = wb.create_sheet('Sizing Report', 0)
+
+	# Default columns if none provided
+	default_cols = [
+		'Cable No', 'From', 'To', 'Voltage', 'Load kW', 'Length m',
+		'FLC A', 'Derated A', 'CSA mm2', 'Vdrop %', 'Start Vdrop %', 'Start Method',
+		'SC OK', 'SC Required Area', 'Catalog Vendor', 'Catalog Part', 'Remarks'
+	]
+
+	headers = columns if columns and isinstance(columns, list) else default_cols
+	ws.append(headers)
+
+	header_fill = PatternFill(start_color='0B5394', end_color='0B5394', fill_type='solid')
+	header_font = Font(bold=True, color='FFFFFF')
+	thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+
+	for cell in ws[1]:
+		cell.fill = header_fill
+		cell.font = header_font
+		cell.alignment = Alignment(horizontal='center', vertical='center')
+
+	for r in rows:
+		result = r.get('result', {}) or {}
+		cable_no = r.get('cable_number', '')
+		from_eq = r.get('from_equipment', '')
+		to_eq = r.get('to_equipment', '')
+		voltage = r.get('voltage', '')
+		load_kw = r.get('load_kw', '')
+		length = r.get('length', 0)
+		flc = result.get('flc', '')
+		derated = result.get('derated_current', '')
+		csa = result.get('selected_csa', '')
+		vdrop = result.get('vdrop_percent', '')
+		# find start vdrop in compliance
+		start_item = None
+		sc_item = None
+		if result.get('compliance'):
+			for ci in result['compliance']:
+				if ci.get('type') in ('vdrop_start', 'vdrop_starting', 'vdrop_start'):
+					start_item = ci
+				if ci.get('type') == 'sc':
+					sc_item = ci
+
+		start_vdrop = start_item.get('value') if start_item else ''
+		start_method = r.get('motor_start_method') or (start_item.get('msg') if start_item else '')
+		sc_ok = result.get('sc_ok', '')
+		sc_req = result.get('sc_required_area', '')
+		vendor = r.get('catalog_vendor') or ''
+		part = r.get('catalog_part_no') or ''
+		remarks = r.get('remarks') or ''
+
+		row_out = []
+		for h in headers:
+			key = h.lower()
+			if h == 'Cable No': row_out.append(cable_no)
+			elif h == 'From': row_out.append(from_eq)
+			elif h == 'To': row_out.append(to_eq)
+			elif h == 'Voltage': row_out.append(voltage)
+			elif h == 'Load kW': row_out.append(load_kw)
+			elif h == 'Length m': row_out.append(length)
+			elif h in ('FLC A', 'FLC'): row_out.append(flc)
+			elif h in ('Derated A', 'Derated'): row_out.append(derated)
+			elif h in ('CSA mm2', 'CSA (mm²)'): row_out.append(csa)
+			elif h in ('Vdrop %', 'Vdrop'): row_out.append(vdrop)
+			elif h in ('Start Vdrop %', 'Start Vdrop'): row_out.append(start_vdrop)
+			elif h == 'Start Method': row_out.append(start_method)
+			elif h == 'SC OK': row_out.append('Yes' if sc_ok else 'No')
+			elif h == 'SC Required Area': row_out.append(sc_req)
+			elif h == 'Catalog Vendor': row_out.append(vendor)
+			elif h == 'Catalog Part': row_out.append(part)
+			elif h == 'Remarks': row_out.append(remarks)
+			else:
+				# try to fetch generic keys
+				row_out.append(r.get(h) or result.get(h) or '')
+
+		ws.append(row_out)
+		for cell in ws[ws.max_row]:
+			cell.border = thin_border
+			cell.alignment = Alignment(horizontal='center', vertical='center')
+
+	# autosize some columns
+	for idx, col in enumerate(ws.iter_cols(min_row=1, max_row=1), start=1):
+		ws.column_dimensions[col[0].column_letter].width = 18
+
+	excel_bytes = BytesIO()
+	wb.save(excel_bytes)
+	excel_bytes.seek(0)
+
+	timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+	filename = f"SizingReport_{project}_{timestamp}.xlsx"
+	filepath = f"/tmp/{filename}"
+	with open(filepath, 'wb') as f:
+		f.write(excel_bytes.getvalue())
+
+	return {'downloadUrl': f'/cable/download-excel/{filename}', 'filename': filename}
+
+
 @router.get('/download-excel/{filename}')
 def download_excel(filename: str):
 	"""Download the generated Excel file."""
