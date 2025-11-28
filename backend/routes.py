@@ -8,6 +8,10 @@ from cable_engine import (
 	voltage_drop_percent,
 	short_circuit_check,
 )
+from fastapi import UploadFile, File, HTTPException
+import pandas as pd
+import uuid
+import os
 
 router = APIRouter(prefix="/cable", tags=["Cable Sizing"])
 
@@ -110,6 +114,71 @@ def bulk_size_cables(data: List[CableInput]):
 				vdrop_ok=bool(vdrop_ok),
 			)
 		)
+
+	return results
+
+
+
+@router.post('/upload', response_model=dict)
+def upload_excel(file: UploadFile = File(...)):
+	"""Upload an Excel file and return detected headers, sample rows and a token to map later."""
+	if not file.filename.lower().endswith(('.xls', '.xlsx')):
+		raise HTTPException(status_code=400, detail='Only Excel files are supported')
+
+	token = str(uuid.uuid4())
+	save_path = f"/tmp/{token}.xlsx"
+	with open(save_path, 'wb') as f:
+		f.write(file.file.read())
+
+	try:
+		df = pd.read_excel(save_path, engine='openpyxl')
+	except Exception as e:
+		raise HTTPException(status_code=400, detail=f'Failed to read Excel: {e}')
+
+	headers = [str(c) for c in df.columns.tolist()]
+	sample = df.head(10).fillna('').to_dict(orient='records')
+
+	return {'token': token, 'headers': headers, 'sample': sample}
+
+
+@router.post('/map-upload', response_model=list)
+def map_upload(payload: dict):
+	"""Accepts { token: str, mapping: {targetField: columnName} } and returns array of BulkRow-like objects."""
+	token = payload.get('token')
+	mapping = payload.get('mapping') or {}
+	if not token:
+		raise HTTPException(status_code=400, detail='token required')
+
+	path = f"/tmp/{token}.xlsx"
+	if not os.path.exists(path):
+		raise HTTPException(status_code=404, detail='Uploaded file not found')
+
+	try:
+		df = pd.read_excel(path, engine='openpyxl')
+	except Exception as e:
+		raise HTTPException(status_code=400, detail=f'Failed to read saved Excel: {e}')
+
+	results = []
+	for _, row in df.fillna('').iterrows():
+		out = {
+			'cable_number': str(row.get(mapping.get('cable_number', ''), '')),
+			'from_equipment': str(row.get(mapping.get('from_equipment', ''), '')),
+			'to_equipment': str(row.get(mapping.get('to_equipment', ''), '')),
+			'load_kw': float(row.get(mapping.get('load_kw', ''), 0) or 0),
+			'load_kva': float(row.get(mapping.get('load_kva', ''), 0) or 0),
+			'current': float(row.get(mapping.get('current', ''), 0) or 0),
+			'voltage': float(row.get(mapping.get('voltage', ''), 415) or 415),
+			'pf': float(row.get(mapping.get('pf', ''), 1.0) or 1.0),
+			'eff': float(row.get(mapping.get('eff', ''), 1.0) or 1.0),
+			'length': float(row.get(mapping.get('length', ''), 0) or 0),
+			'mv_per_a_m': float(row.get(mapping.get('mv_per_a_m', ''), 0.44) or 0.44),
+			'derating1': float(row.get(mapping.get('derating1', ''), 1) or 1),
+			'derating2': float(row.get(mapping.get('derating2', ''), 1) or 1),
+			'sc_current': float(row.get(mapping.get('sc_current', ''), 0) or 0),
+			'sc_time': float(row.get(mapping.get('sc_time', ''), 1) or 1),
+			'k_const': float(row.get(mapping.get('k_const', ''), 115) or 115),
+		}
+		results.append(out)
 
 	return results
 

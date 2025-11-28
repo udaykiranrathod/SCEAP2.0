@@ -1,0 +1,29 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Uday kiran rathod",email = "74170586+udaykiranrathod@users.noreply.github.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi (>=0.122.0,<0.123.0)",
+    "uvicorn[standard] (>=0.38.0,<0.39.0)",
+    "pydantic[dotenv] (>=2.12.5,<3.0.0)",
+    "pandas (>=2.3.3,<3.0.0)",
+    "numpy (>=2.3.5,<3.0.0)",
+    "openpyxl (>=3.1.5,<4.0.0)",
+    "python-multipart (>=0.0.20,<0.0.21)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "black (>=25.11.0,<26.0.0)",
+    "isort (>=7.0.0,<8.0.0)"
+]
