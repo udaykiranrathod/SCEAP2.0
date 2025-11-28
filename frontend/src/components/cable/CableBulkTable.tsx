@@ -152,29 +152,41 @@ const CableBulkTable: React.FC<Props> = ({ onSelectResult }) => {
     URL.revokeObjectURL(url);
   };
 
-  const importRows = (imported: any[]) => {
+  const importRows = (imported: Record<string, unknown>[]) => {
     // Convert imported rows into BulkRow entries
     setRows((prev) => [
       ...prev,
-      ...imported.map((r, i) => ({
-        id: `imp-${Date.now()}-${i}`,
-        cable_number: r.cable_number || `CBL-IMP-${i + 1}`,
-        from_equipment: r.from_equipment || '',
-        to_equipment: r.to_equipment || '',
-        load_kw: Number(r.load_kw || 0),
-        load_kva: Number(r.load_kva || 0),
-        current: Number(r.current || 0),
-        voltage: Number(r.voltage || 415),
-        pf: Number(r.pf || 1),
-        eff: Number(r.eff || 1),
-        length: Number(r.length || 0),
-        mv_per_a_m: Number(r.mv_per_a_m || 0.44),
-        derating1: Number(r.derating1 || 1),
-        derating2: Number(r.derating2 || 1),
-        sc_current: Number(r.sc_current || 0),
-        sc_time: Number(r.sc_time || 1),
-        k_const: Number(r.k_const || 115),
-      })),
+      ...imported.map((r, i) => {
+        const getString = (k: string, d = ''): string => {
+          const v = (r as Record<string, unknown>)[k];
+          return v === undefined || v === null ? d : String(v);
+        };
+        const getNumber = (k: string, d = 0): number => {
+          const v = (r as Record<string, unknown>)[k];
+          const n = Number(v ?? d);
+          return Number.isFinite(n) ? n : d;
+        };
+
+        return {
+          id: `imp-${Date.now()}-${i}`,
+          cable_number: getString('cable_number') || `CBL-IMP-${i + 1}`,
+          from_equipment: getString('from_equipment', ''),
+          to_equipment: getString('to_equipment', ''),
+          load_kw: getNumber('load_kw', 0),
+          load_kva: getNumber('load_kva', 0),
+          current: getNumber('current', 0),
+          voltage: getNumber('voltage', 415),
+          pf: getNumber('pf', 1),
+          eff: getNumber('eff', 1),
+          length: getNumber('length', 0),
+          mv_per_a_m: getNumber('mv_per_a_m', 0.44),
+          derating1: getNumber('derating1', 1),
+          derating2: getNumber('derating2', 1),
+          sc_current: getNumber('sc_current', 0),
+          sc_time: getNumber('sc_time', 1),
+          k_const: getNumber('k_const', 115),
+        } as BulkRow;
+      }),
     ]);
   };
 

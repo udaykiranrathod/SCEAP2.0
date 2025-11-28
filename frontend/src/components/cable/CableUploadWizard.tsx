@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { api } from '../../api/client';
 
 interface Props {
-  onImportRows: (rows: any[]) => void;
+  onImportRows: (rows: Record<string, unknown>[]) => void;
 }
 
 const mapTargets = [
@@ -27,7 +27,7 @@ const mapTargets = [
 const CableUploadWizard: React.FC<Props> = ({ onImportRows }) => {
   const [token, setToken] = useState<string | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
-  const [sample, setSample] = useState<any[]>([]);
+  const [sample, setSample] = useState<Record<string, unknown>[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
@@ -37,14 +37,15 @@ const CableUploadWizard: React.FC<Props> = ({ onImportRows }) => {
     fd.append('file', file);
     setLoading(true);
     try {
-      const res = await api.post('/cable/upload', fd as any, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const res = await api.post<{ token: string; headers: string[]; sample: Record<string, unknown>[] }>(
+        '/cable/upload',
+        fd,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
       setToken(res.data.token);
       setHeaders(res.data.headers || []);
       setSample(res.data.sample || []);
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error('Upload failed', e);
       alert('Upload failed');
     } finally {
@@ -56,7 +57,7 @@ const CableUploadWizard: React.FC<Props> = ({ onImportRows }) => {
     if (!token) return alert('Upload a file first');
     setLoading(true);
     try {
-      const res = await api.post('/cable/map-upload', { token, mapping });
+      const res = await api.post<Record<string, unknown>[]>('/cable/map-upload', { token, mapping });
       onImportRows(res.data || []);
       // reset
       setToken(null);
@@ -64,7 +65,6 @@ const CableUploadWizard: React.FC<Props> = ({ onImportRows }) => {
       setSample([]);
       setMapping({});
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error('Mapping failed', e);
       alert('Mapping failed');
     } finally {
