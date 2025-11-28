@@ -18,15 +18,18 @@ const CableSizingPage: React.FC = () => {
       setLoading(true);
       setErrorMessage(null);
       // Log the API base URL being used (helpful to debug wrong baseURL usage)
-      // eslint-disable-next-line no-console
+       
       console.debug('[API] Posting to', api.defaults.baseURL + '/cable/size', payload);
       const res = await api.post<CableOutput>('/cable/size', payload);
       setResult(res.data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // More verbose error for debugging
-      // eslint-disable-next-line no-console
       console.error('[API] Request failed', err);
-      const message = err?.message || 'Unknown error';
+      let message = 'Unknown error';
+      if (err && typeof err === 'object' && 'message' in err) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        message = (err as any).message || message;
+      }
       setErrorMessage(`Error: ${message}. Check backend & CORS.`);
     } finally {
       setLoading(false);

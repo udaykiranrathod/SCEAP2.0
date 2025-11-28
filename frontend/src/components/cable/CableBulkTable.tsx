@@ -39,7 +39,7 @@ const CableBulkTable: React.FC<Props> = ({ onSelectResult }) => {
         row.id === id
           ? {
               ...row,
-              [field]: typeof row[field] === 'number' ? (value === '' ? ('' as any) : Number(value)) : value,
+              [field]: typeof row[field] === 'number' ? Number(value) : value,
             }
           : row,
       ),
@@ -73,7 +73,7 @@ const CableBulkTable: React.FC<Props> = ({ onSelectResult }) => {
       const results = res.data;
       setRows((prev) => prev.map((row, idx) => ({ ...row, result: results[idx] })));
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.error(err);
       alert('Bulk sizing failed. Check backend /cable/bulk-size & CORS.');
     } finally {
