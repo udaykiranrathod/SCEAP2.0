@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BulkRow } from '../../types/cable';
 import type { CableInput, CableOutput } from '../../types/cable';
 import { api } from '../../api/client';
+import CableUploadWizard from './CableUploadWizard';
 
 interface Props {
   onSelectResult: (result: CableOutput) => void;
@@ -125,6 +126,58 @@ const CableBulkTable: React.FC<Props> = ({ onSelectResult }) => {
     URL.revokeObjectURL(url);
   };
 
+  const exportBoq = () => {
+    // BOQ: unique selected_csa, total length and count
+    const map: Record<string, { csa: number; totalLength: number; count: number }> = {};
+    rows.forEach((row) => {
+      const r = row.result;
+      const csa = r?.selected_csa ?? row?.result?.selected_csa ?? null;
+      const len = Number(row.length || 0) || 0;
+      if (csa) {
+        const key = String(csa);
+        if (!map[key]) map[key] = { csa: csa, totalLength: 0, count: 0 };
+        map[key].totalLength += len;
+        map[key].count += 1;
+      }
+    });
+    const headers = ['CSA_mm2', 'Count', 'TotalLength_m'];
+    const lines = Object.values(map).map((v) => [v.csa, v.count, v.totalLength].join(','));
+    const csv = [headers.join(','), ...lines].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sceap_boq.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importRows = (imported: any[]) => {
+    // Convert imported rows into BulkRow entries
+    setRows((prev) => [
+      ...prev,
+      ...imported.map((r, i) => ({
+        id: `imp-${Date.now()}-${i}`,
+        cable_number: r.cable_number || `CBL-IMP-${i + 1}`,
+        from_equipment: r.from_equipment || '',
+        to_equipment: r.to_equipment || '',
+        load_kw: Number(r.load_kw || 0),
+        load_kva: Number(r.load_kva || 0),
+        current: Number(r.current || 0),
+        voltage: Number(r.voltage || 415),
+        pf: Number(r.pf || 1),
+        eff: Number(r.eff || 1),
+        length: Number(r.length || 0),
+        mv_per_a_m: Number(r.mv_per_a_m || 0.44),
+        derating1: Number(r.derating1 || 1),
+        derating2: Number(r.derating2 || 1),
+        sc_current: Number(r.sc_current || 0),
+        sc_time: Number(r.sc_time || 1),
+        k_const: Number(r.k_const || 115),
+      })),
+    ]);
+  };
+
   const statusChip = (ok?: boolean) => {
     if (ok === undefined) return <span className="text-[10px] text-slate-500">--</span>;
     return (
@@ -151,6 +204,7 @@ const CableBulkTable: React.FC<Props> = ({ onSelectResult }) => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <CableUploadWizard onImportRows={importRows} />
           <button
             type="button"
             onClick={addRow}
@@ -172,6 +226,13 @@ const CableBulkTable: React.FC<Props> = ({ onSelectResult }) => {
             className="px-3 py-1.5 rounded-full text-[11px] border border-sceap-border bg-sceap-panel/70 hover:border-sceap-accent-soft"
           >
             ⬇ Export CSV
+          </button>
+          <button
+            type="button"
+            onClick={exportBoq}
+            className="px-3 py-1.5 rounded-full text-[11px] border border-sceap-border bg-sceap-panel/70 hover:border-sceap-accent-soft"
+          >
+            ⬇ Export BOQ
           </button>
         </div>
       </div>
